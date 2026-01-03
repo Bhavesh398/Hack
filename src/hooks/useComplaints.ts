@@ -22,6 +22,7 @@ export interface DbComplaint {
   impact_prediction: string | null;
   affected_people: number | null;
   sla_hours: number | null;
+  media_urls?: string[]; // optional media attachments for the complaint
   created_at: string;
   updated_at: string;
   resolved_at: string | null;

@@ -13,7 +13,11 @@ import {
   Layers,
   BarChart3,
   FileText,
-  Building2
+  Building2,
+  Trophy,
+  Medal,
+  Sparkles,
+  ShieldCheck
 } from "lucide-react";
 
 const features = [
@@ -56,11 +60,76 @@ const stats = [
   { value: "95%", label: "Classification Accuracy" },
 ];
 
+const champions = [
+  {
+    name: "Aarav Mehta",
+    contributions: 15,
+    focus: "Water and sanitation drives",
+    city: "Mumbai",
+    badge: "Impact Champion",
+    prevented: 18,
+  },
+  {
+    name: "Sara Iyer",
+    contributions: 10,
+    focus: "Road safety and lighting",
+    city: "Thane",
+    badge: "Safety Sentinel",
+    prevented: 14,
+  },
+  {
+    name: "Kabir Narang",
+    contributions: 8,
+    focus: "Health access and clinics",
+    city: "Navi Mumbai",
+    badge: "Health Ally",
+    prevented: 11,
+  },
+];
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
+      {/* Sticky Top Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-br from-[#001b36] via-[#00234f] to-[#003e7c] backdrop-blur-lg border-b border-white/10 shadow-lg shadow-black/20">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-6">
+            <Link to="/">
+              <Logo size="md" showText={true} className="text-white cursor-pointer hover:opacity-90 transition-opacity" />
+            </Link>
+            
+            <div className="flex items-center gap-3">
+              <Link to="/file-complaint">
+                <Button
+                  size="md"
+                  className="rounded-full border border-white/30 bg-white text-[#00234f] hover:bg-white/90 hover:-translate-y-0.5 shadow-sm transition"
+                >
+                  File a Grievance
+                </Button>
+              </Link>
+              <Link to="/dashboard">
+                <Button
+                  size="md"
+                  className="rounded-full border border-white/30 bg-white text-[#00234f] hover:bg-white/90 hover:-translate-y-0.5 shadow-sm transition"
+                >
+                  Complaint Tracker
+                </Button>
+              </Link>
+              <Link to="/authority-login">
+                <Button
+                  size="md"
+                  className="rounded-full border border-white/30 bg-white text-[#00234f] hover:bg-white/90 hover:-translate-y-0.5 shadow-sm transition"
+                >
+                  Authority Login
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-primary">
+      <section className="relative overflow-hidden bg-primary pt-20">
         <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary to-accent/30" />
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0" style={{
@@ -68,32 +137,8 @@ export default function LandingPage() {
           }} />
         </div>
         
-        <div className="relative container mx-auto px-4 pt-20 pb-32">
-          <nav className="flex items-center justify-between mb-20">
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              <Logo size="md" showText={true} className="text-white" />
-            </motion.div>
-            
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-4"
-            >
-              <Link to="/file-complaint">
-                <Button variant="heroOutline" size="lg">
-                  File Complaint
-                </Button>
-              </Link>
-              <Link to="/dashboard">
-                <Button variant="hero" size="lg">
-                  Authority Dashboard
-                </Button>
-              </Link>
-            </motion.div>
-          </nav>
+        <div className="relative container mx-auto px-4 pt-0 pb-32">
+          {/* Original nav hidden on desktop, shown on mobile as internal nav */}
 
           <div className="max-w-4xl mx-auto text-center">
             <motion.div
@@ -111,11 +156,11 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="text-5xl md:text-7xl font-extrabold text-white mb-6 leading-tight"
+              className="text-5xl md:text-7xl font-extrabold mb-6 leading-tight"
             >
-              Because Every{" "}
-              <span className="text-accent">Complaint</span>
-              <br />Matters
+              <span className="text-white">Because Every{" "}</span>
+              <span className="text-white">Complaint</span>
+              <br /><span className="text-white">Matters</span>
             </motion.h1>
 
             <motion.p
@@ -156,12 +201,15 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
-            className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto"
+            className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto"
           >
             {stats.map((stat, index) => (
-              <div key={stat.label} className="text-center">
-                <p className="text-3xl md:text-4xl font-bold text-accent mb-1">{stat.value}</p>
-                <p className="text-sm text-white/70">{stat.label}</p>
+              <div 
+                key={stat.label} 
+                className="text-center rounded-2xl bg-white/10 backdrop-blur-sm border border-white/15 px-4 py-5 shadow-lg shadow-black/10"
+              >
+                <p className="text-3xl md:text-4xl font-bold text-white mb-1">{stat.value}</p>
+                <p className="text-sm text-white/75">{stat.label}</p>
               </div>
             ))}
           </motion.div>
@@ -224,6 +272,81 @@ export default function LandingPage() {
               )}
             </motion.div>
           ))}
+        </div>
+      </section>
+
+      {/* Citizen Recognition */}
+      <section className="py-20 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+        <div className="container mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent/10 text-accent font-semibold mb-4">
+              <Sparkles className="w-4 h-4" />
+              Citizen Recognition
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
+              People powering better cities
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              We spotlight citizens who file high-quality reports, share fixes, and help departments resolve faster.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {champions.map((champion, index) => (
+              <motion.div
+                key={champion.name}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                className="relative overflow-hidden rounded-2xl border border-border/60 bg-card shadow-lg"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-primary/5" />
+                <div className="relative p-6 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">{champion.city}</p>
+                      <h3 className="text-xl font-semibold text-foreground">{champion.name}</h3>
+                    </div>
+                    <div className="flex items-center gap-2 text-accent">
+                      <Trophy className="w-5 h-5" />
+                      <span className="text-sm font-semibold">Top {index + 1}%</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <ShieldCheck className="w-4 h-4 text-accent" />
+                    <span>{champion.badge}</span>
+                  </div>
+
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {champion.focus}
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="rounded-xl bg-muted/60 p-3">
+                      <p className="text-2xl font-bold text-foreground">{champion.contributions}</p>
+                      <p className="text-xs text-muted-foreground">Impactful reports</p>
+                    </div>
+                    <div className="rounded-xl bg-muted/60 p-3">
+                      <p className="text-2xl font-bold text-foreground">{champion.prevented}</p>
+                      <p className="text-xs text-muted-foreground">Escalations avoided</p>
+                    </div>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 rounded-full bg-accent/10 text-accent px-3 py-1 text-sm font-medium">
+                    <Medal className="w-4 h-4" />
+                    Recognized contributor
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 

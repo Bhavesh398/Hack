@@ -29,25 +29,37 @@ interface Predictions {
     riskScore: number;
     prediction: string;
     recommendedAction: string;
+    estimatedImpact?: number;
+    timeToResolve?: string;
   }>;
   trends: Array<{
     category: string;
     direction: "rising" | "falling" | "stable";
     percentChange: number;
     reason: string;
+    priority?: string;
   }>;
   slaRisks: Array<{
     category: string;
     count: number;
     urgency: "immediate" | "within_24h" | "within_week";
+    recommendedResolution?: string;
   }>;
   seasonalAlert: {
     active: boolean;
     type: string;
     affectedCategories: string[];
     recommendation: string;
+    priority?: string;
+    timeline?: string;
   };
-  resourceRecommendation: {
+  resourceRecommendation: Array<{
+    department: string;
+    priority?: string;
+    reason: string;
+    estimatedCost?: number;
+    suggestedAction: string;
+  }> | {
     department: string;
     reason: string;
     suggestedAction: string;
@@ -56,6 +68,7 @@ interface Predictions {
     overall: "positive" | "neutral" | "negative" | "critical";
     trend: "improving" | "declining" | "stable";
     topConcern: string;
+    priority?: string;
   };
 }
 
@@ -73,15 +86,27 @@ export function AdvancedPredictions({ complaints }: AdvancedPredictionsProps) {
     setError(null);
     
     try {
-      const { data, error } = await supabase.functions.invoke('predict-issues', {
-        body: { complaints, timeRange: 'last 7 days' }
+      console.log('Fetching predictions with', complaints.length, 'complaints');
+      
+      const { data, error: invokeError } = await supabase.functions.invoke('predict-issues', {
+        body: { 
+          complaints: complaints.slice(0, 50), // Limit to 50 most recent
+          timeRange: 'last 7 days' 
+        }
       });
 
-      if (error) throw error;
-      setPredictions(data);
+      if (invokeError) {
+        console.error('Supabase function error:', invokeError);
+        throw invokeError;
+      }
+      
+      if (data) {
+        console.log('Predictions received:', data);
+        setPredictions(data);
+      }
     } catch (err) {
       console.error('Prediction error:', err);
-      setError('Failed to generate predictions');
+      setError('Failed to generate predictions. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -338,13 +363,38 @@ export function AdvancedPredictions({ complaints }: AdvancedPredictionsProps) {
                   <Zap className="w-8 h-8 text-accent" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-foreground mb-1">Resource Recommendation</h3>
-                  <p className="text-muted-foreground mb-3">
-                    <span className="font-semibold text-accent">{predictions.resourceRecommendation.department}</span> - {predictions.resourceRecommendation.reason}
-                  </p>
-                  <div className="p-3 rounded-lg bg-card border border-border/50">
-                    <p className="text-sm font-medium text-foreground">{predictions.resourceRecommendation.suggestedAction}</p>
-                  </div>
+                  <h3 className="text-lg font-bold text-foreground mb-1">Resource Recommendations</h3>
+                  {Array.isArray(predictions.resourceRecommendation) ? (
+                    <div className="space-y-3">
+                      {predictions.resourceRecommendation.map((rec, idx) => (
+                        <div key={idx} className="p-3 rounded-lg bg-card border border-border/50">
+                          <div className="text-muted-foreground mb-2 flex items-center gap-2">
+                            <span className="font-semibold text-accent">{rec.department}</span>
+                            {rec.priority && (
+                              <Badge variant={
+                                rec.priority === 'urgent' ? 'destructive' : 
+                                rec.priority === 'high' ? 'default' : 
+                                'secondary'
+                              }>
+                                {rec.priority}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-1">{rec.reason}</p>
+                          <p className="text-sm font-medium text-foreground">{rec.suggestedAction}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-muted-foreground mb-3">
+                        <span className="font-semibold text-accent">{predictions.resourceRecommendation.department}</span> - {predictions.resourceRecommendation.reason}
+                      </p>
+                      <div className="p-3 rounded-lg bg-card border border-border/50">
+                        <p className="text-sm font-medium text-foreground">{predictions.resourceRecommendation.suggestedAction}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </CardContent>

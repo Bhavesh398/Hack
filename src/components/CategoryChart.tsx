@@ -32,6 +32,9 @@ export function CategoryChart({ categoryBreakdown }: CategoryChartProps) {
       <CardContent className="space-y-4">
         {sortedCategories.map(([category, count], index) => {
           const categoryInfo = getCategoryInfo(category);
+          const isFallback = categoryInfo === CATEGORIES.administrative && category.toLowerCase() !== "administrative";
+          const displayName = isFallback ? category : categoryInfo.name;
+          const displayIcon = isFallback ? "📄" : categoryInfo.icon;
           const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
 
           return (
@@ -44,8 +47,8 @@ export function CategoryChart({ categoryBreakdown }: CategoryChartProps) {
             >
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
-                  <span>{categoryInfo.icon}</span>
-                  <span className="font-medium">{categoryInfo.name}</span>
+                  <span>{displayIcon}</span>
+                  <span className="font-medium">{displayName}</span>
                 </div>
                 <span className="text-muted-foreground">{count} ({percentage}%)</span>
               </div>

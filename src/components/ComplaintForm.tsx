@@ -1,26 +1,254 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Send, MapPin, FileText, CheckCircle2, Loader2, User, Mail, Phone, Navigation, Upload, X, Image as ImageIcon, Video } from "lucide-react";
+import { Send, MapPin, FileText, CheckCircle2, Loader2, User, Mail, Phone, Navigation, Upload, X, Image as ImageIcon, Video, Languages, Mic, MicOff } from "lucide-react";
 import { useComplaints } from "@/hooks/useComplaints";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const LANGUAGES = [
+  { code: 'en', name: 'English' },
+  { code: 'hi', name: 'हिंदी (Hindi)' },
+  { code: 'mr', name: 'मराठी (Marathi)' },
+  { code: 'gu', name: 'ગુજરાતી (Gujarati)' },
+  { code: 'ta', name: 'தமிழ் (Tamil)' },
+  { code: 'te', name: 'తెలుగు (Telugu)' },
+  { code: 'kn', name: 'ಕನ್ನಡ (Kannada)' },
+  { code: 'ml', name: 'മലയാളം (Malayalam)' },
+  { code: 'bn', name: 'বাংলা (Bengali)' },
+  { code: 'pa', name: 'ਪੰਜਾਬੀ (Punjabi)' },
+];
 
 export function ComplaintForm() {
   const [citizenName, setCitizenName] = useState("");
   const [citizenEmail, setCitizenEmail] = useState("");
   const [citizenPhone, setCitizenPhone] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [text, setText] = useState("");
+  const [translatedText, setTranslatedText] = useState("");
+  const [isTranslating, setIsTranslating] = useState(false);
   const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   const { submitComplaint } = useComplaints();
   const { toast } = useToast();
+
+  const stopRecording = () => {
+    recognitionRef.current?.stop();
+    setIsRecording(false);
+  };
+
+  const startRecording = () => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+
+    if (!(window as any).isSecureContext) {
+      toast({
+        title: "Voice Input Needs HTTPS",
+        description: "Please use a secure (https) connection to enable microphone access.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({
+        title: "Voice Input Not Supported",
+        description: "Your browser does not support speech recognition.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const recognition: any = new SpeechRecognition();
+    recognition.lang = selectedLanguage === 'en' ? 'en-IN' : selectedLanguage;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: any) => {
+      let combined = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        combined += event.results[i][0].transcript;
+      }
+      const updated = `${text ? text + ' ' : ''}${combined}`.trim();
+      handleComplaintChange(updated);
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsRecording(false);
+      const errorType = event?.error || "unknown";
+      const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+
+      const messages: Record<string, { title: string; description: string; variant?: "default" | "destructive" }> = {
+        "not-allowed": {
+          title: "Microphone Permission Blocked",
+          description: "Allow mic access in your browser settings and try again.",
+          variant: "destructive",
+        },
+        "service-not-allowed": {
+          title: "Microphone Permission Blocked",
+          description: "Allow mic access in your browser settings and try again.",
+          variant: "destructive",
+        },
+        "audio-capture": {
+          title: "No Microphone Detected",
+          description: "Plug in or enable a microphone, then retry.",
+          variant: "destructive",
+        },
+        "network": {
+          title: isOffline ? "You appear offline" : "Network Issue",
+          description: isOffline
+            ? "Reconnect to the internet and retry voice input."
+            : "Check your connection or VPN and retry voice input.",
+          variant: isOffline ? "default" : "destructive",
+        },
+        "no-speech": {
+          title: "No Speech Detected",
+          description: "We couldn't hear anything. Speak again when ready.",
+          variant: "default",
+        },
+        "aborted": {
+          title: "Voice Capture Stopped",
+          description: "Recording was stopped. Start again to continue.",
+          variant: "default",
+        },
+        "unknown": {
+          title: "Voice Capture Error",
+          description: "Please try again or check your microphone permissions.",
+          variant: "destructive",
+        },
+      };
+
+      const { title, description, variant } = messages[errorType] || messages["unknown"];
+      toast({ title, description, variant: variant || "destructive" });
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopRecording();
+    };
+  }, []);
+
+  const translateToEnglish = async (textToTranslate: string, language: string) => {
+    if (language === 'en' || !textToTranslate.trim()) {
+      setTranslatedText(textToTranslate);
+      return;
+    }
+
+    setIsTranslating(true);
+    try {
+      // Language pair mapping for MyMemory API
+      const langPairs: Record<string, string> = {
+        'hi': 'hi|en',
+        'mr': 'mr|en',
+        'gu': 'gu|en',
+        'ta': 'ta|en',
+        'te': 'te|en',
+        'kn': 'kn|en',
+        'ml': 'ml|en',
+        'bn': 'bn|en',
+        'pa': 'pa|en',
+      };
+
+      const langPair = langPairs[language] || 'en|en';
+      const encodedText = encodeURIComponent(textToTranslate);
+      
+      try {
+        // Try MyMemory API first
+        const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodedText}&langpair=${langPair}`, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.responseStatus === 200 && data.responseData.translatedText) {
+            setTranslatedText(data.responseData.translatedText);
+            setIsTranslating(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('MyMemory API failed, trying fallback');
+      }
+
+      // Fallback: Try using Gemini API if available
+      try {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `Translate the following text from ${language} to English. Respond with ONLY the translated text, nothing else, no explanations:\n\n"${textToTranslate}"`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 1024,
+            }
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (translated) {
+            setTranslatedText(translated);
+            setIsTranslating(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('Gemini API failed');
+      }
+
+      // If both fail, use original text
+      setTranslatedText(textToTranslate);
+      toast({
+        title: "Translation Note",
+        description: "Could not auto-translate. Original text will be used.",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error('Translation error:', error);
+      setTranslatedText(textToTranslate);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleComplaintChange = async (value: string) => {
+    setText(value);
+    if (selectedLanguage !== 'en' && value.trim()) {
+      await translateToEnglish(value, selectedLanguage);
+    } else {
+      setTranslatedText(value);
+    }
+  };
 
   const handleGetCurrentLocation = async () => {
     if (!navigator.geolocation) {
@@ -157,7 +385,7 @@ export function ComplaintForm() {
         citizenName,
         citizenEmail: citizenEmail || undefined,
         citizenPhone: citizenPhone || undefined,
-        description: text,
+        description: translatedText || text, // Use translated text or fallback to original
         location,
         affectedPeople: 1,
         attachedFiles,
@@ -170,6 +398,8 @@ export function ComplaintForm() {
         setCitizenEmail("");
         setCitizenPhone("");
         setText("");
+        setTranslatedText("");
+        setSelectedLanguage("en");
         setLocation("");
         setAttachedFiles([]);
         setSubmittedId(null);
@@ -244,13 +474,54 @@ export function ComplaintForm() {
           </div>
 
           <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Languages className="w-4 h-4 text-accent" />
+              Select Language
+            </label>
+            <Select value={selectedLanguage} onValueChange={(value) => {
+              setSelectedLanguage(value);
+              if (text.trim()) {
+                handleComplaintChange(text);
+              }
+            }}>
+              <SelectTrigger className="border-border/50 bg-background text-foreground">
+                <SelectValue placeholder="Choose a language" />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGES.map((lang) => (
+                  <SelectItem key={lang.code} value={lang.code}>
+                    {lang.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Write your complaint in any language - it will be automatically translated to English for processing.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">
               Your Complaint <span className="text-destructive">*</span>
             </label>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">Type or speak to fill the description.</p>
+              <Button
+                type="button"
+                variant={isRecording ? "destructive" : "outline"}
+                size="sm"
+                onClick={startRecording}
+                disabled={!!submittedId}
+                className="gap-2"
+              >
+                {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {isRecording ? "Stop voice" : "Voice to text"}
+              </Button>
+            </div>
             <Textarea
-              placeholder="Describe your grievance in detail... (e.g., 'There is a huge pothole on Main Street near the hospital. Ambulances are having difficulty passing. This has been going on for 5 days.')"
+              placeholder="Describe your grievance in detail in your preferred language... (e.g., 'There is a huge pothole on Main Street near the hospital. Ambulances are having difficulty passing. This has been going on for 5 days.')"
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => handleComplaintChange(e.target.value)}
               className="min-h-[140px] resize-none border-border/50 bg-background text-foreground placeholder:text-muted-foreground focus:border-accent"
               disabled={!!submittedId}
             />
@@ -258,6 +529,19 @@ export function ComplaintForm() {
               Tip: Include details like duration and urgency for better prioritization.
             </p>
           </div>
+
+          {translatedText && text && selectedLanguage !== 'en' && (
+            <div className="space-y-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <p className="text-xs font-medium text-blue-600">📝 English Translation (will be processed):</p>
+              <p className="text-sm text-foreground">{translatedText}</p>
+              {isTranslating && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Translating...
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground flex items-center gap-2">

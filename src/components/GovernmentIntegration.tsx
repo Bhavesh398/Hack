@@ -33,7 +33,7 @@ const GOVERNMENT_PORTALS = [
     name: "CM Helpline",
     fullName: "Chief Minister's Helpline",
     status: "integrated",
-    url: "#",
+    url: "https://cmhelpline.gov.in",
     logo: "📞",
     description: "Direct escalation to State CM Office",
     features: ["Priority routing", "VIP escalation", "24/7 support"]
@@ -49,7 +49,7 @@ const GOVERNMENT_PORTALS = [
     features: ["Photo upload", "GPS tagging", "Real-time status"]
   },
   {
-    id: "jaldoot",
+    id: "jal-shakti",
     name: "Jal Shakti",
     fullName: "Ministry of Jal Shakti Portal",
     status: "connected",
@@ -59,11 +59,11 @@ const GOVERNMENT_PORTALS = [
     features: ["Water quality", "Supply tracking", "Billing issues"]
   },
   {
-    id: "police",
+    id: "efir-portal",
     name: "e-FIR Portal",
     fullName: "Online Police Complaint System",
     status: "connected",
-    url: "#",
+    url: "https://efir.gov.in",
     logo: "🚔",
     description: "Non-emergency police complaints",
     features: ["FIR filing", "Status check", "Document upload"]
@@ -72,7 +72,7 @@ const GOVERNMENT_PORTALS = [
     id: "umang",
     name: "UMANG",
     fullName: "Unified Mobile Application for New-age Governance",
-    status: "pending",
+    status: "integrated",
     url: "https://umang.gov.in",
     logo: "📱",
     description: "Unified platform for government services",
@@ -106,7 +106,7 @@ export function GovernmentIntegration() {
         </div>
         <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
           <CheckCircle2 className="w-3 h-3 mr-1" />
-          5 Portals Connected
+          6 Portals Connected
         </Badge>
       </div>
 
@@ -165,11 +165,21 @@ export function GovernmentIntegration() {
                     className="mt-4 pt-4 border-t border-border/50"
                   >
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" className="flex-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => window.open(portal.url, '_blank')}
+                      >
                         <Globe className="w-3 h-3 mr-1" />
                         Visit Portal
                       </Button>
-                      <Button variant="default" size="sm" className="flex-1">
+                      <Button 
+                        variant="default" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => setSelectedPortal(null)}
+                      >
                         <ArrowUpRight className="w-3 h-3 mr-1" />
                         Escalate
                       </Button>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useComplaints, DbComplaint } from "@/hooks/useComplaints";
+import { useAuth } from "@/contexts/AuthContext";
 import { StatsCards } from "@/components/StatsCards";
 import { CategoryChart } from "@/components/CategoryChart";
 import { DepartmentPerformance } from "@/components/DepartmentPerformance";
@@ -15,6 +16,8 @@ import { GovernmentIntegration } from "@/components/GovernmentIntegration";
 import { AdvancedPredictions } from "@/components/AdvancedPredictions";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { 
   Search, 
   Filter, 
@@ -29,14 +32,18 @@ import {
   ChevronRight,
   Loader2,
   Building2,
-  Brain
+  Brain,
+  LogOut
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName }: { 
+function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName, isAuthority, onSelect, reporterCount }: { 
   complaint: DbComplaint; 
   onStatusChange: (id: string, status: DbComplaint['status']) => void;
   getDepartmentName: (id: string | null) => string;
+  isAuthority: boolean;
+  onSelect?: (complaint: DbComplaint) => void;
+  reporterCount?: number;
 }) {
   const CATEGORY_ICONS: Record<string, string> = {
     'Sanitation': '🗑️',
@@ -59,13 +66,23 @@ function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName }: {
   const statusDisplay = complaint.status.replace('_', '-') as 'received' | 'assigned' | 'in-progress' | 'resolved';
 
   return (
-    <Card className="border-border/50 hover:border-accent/50 transition-all hover:shadow-lg bg-card group">
+    <Card 
+      className="border-border/50 hover:border-accent/50 transition-all hover:shadow-lg bg-card group cursor-pointer"
+      onClick={() => onSelect?.(complaint)}
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             <span className="text-lg">{CATEGORY_ICONS[complaint.category] || '📋'}</span>
             <div>
-              <p className="font-mono text-xs text-muted-foreground">{complaint.complaint_id}</p>
+              <p className="font-mono text-xs text-muted-foreground flex items-center gap-2">
+                {complaint.complaint_id}
+                {reporterCount && reporterCount > 1 && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                    {reporterCount} reports
+                  </Badge>
+                )}
+              </p>
               <p className="font-medium text-sm text-foreground">{complaint.category}</p>
             </div>
           </div>
@@ -97,7 +114,7 @@ function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName }: {
           <p className="text-xs text-muted-foreground">
             Dept: <span className="text-foreground font-medium">{getDepartmentName(complaint.department_id)}</span>
           </p>
-          {nextStatus && (
+          {isAuthority && nextStatus && (
             <Button 
               variant="ghost" 
               size="sm" 
@@ -108,6 +125,11 @@ function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName }: {
               <ChevronRight className="w-3 h-3" />
             </Button>
           )}
+          {!isAuthority && (
+            <p className="text-xs text-muted-foreground italic">
+              Status: {complaint.status.replace('_', ' ')}
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -116,10 +138,20 @@ function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName }: {
 
 export default function DashboardPage() {
   const { complaints, loading, stats, updateComplaintStatus, getDepartmentName, refetch } = useComplaints();
+  const { isAuthority, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<string>("complaints");
+  const [selectedComplaint, setSelectedComplaint] = useState<(DbComplaint & { reporterCount?: number; mergedIds?: string[] }) | null>(null);
+
+  // Prevent non-authority users from viewing restricted tabs
+  useEffect(() => {
+    if (!isAuthority && (activeTab === "predictions" || activeTab === "analytics")) {
+      setActiveTab("complaints");
+    }
+  }, [isAuthority, activeTab]);
 
   const filteredComplaints = useMemo(() => {
     return complaints.filter(complaint => {
@@ -137,6 +169,31 @@ export default function DashboardPage() {
     });
   }, [complaints, searchQuery, priorityFilter, statusFilter, categoryFilter]);
 
+  const mergedComplaints = useMemo(() => {
+    const priorityRank = { critical: 4, high: 3, medium: 2, low: 1 } as const;
+    const map = new Map<string, DbComplaint & { reporterCount: number; mergedIds: string[] }>();
+
+    for (const c of filteredComplaints) {
+      const key = `${(c.description || '').trim().toLowerCase()}|${(c.location || '').trim().toLowerCase()}`;
+      if (!map.has(key)) {
+        map.set(key, { ...c, reporterCount: 1, mergedIds: [c.id], media_urls: c.media_urls || [] });
+      } else {
+        const existing = map.get(key)!;
+        // pick higher priority
+        const betterPriority = priorityRank[c.priority] > priorityRank[existing.priority] ? c.priority : existing.priority;
+        const mediaCombined = [...(existing.media_urls || []), ...(c.media_urls || [])];
+        map.set(key, {
+          ...existing,
+          reporterCount: existing.reporterCount + 1,
+          mergedIds: [...existing.mergedIds, c.id],
+          priority: betterPriority,
+          media_urls: mediaCombined,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [filteredComplaints]);
+
   const criticalComplaints = complaints.filter(c => c.priority === 'critical' && c.status !== 'resolved');
 
   return (
@@ -146,12 +203,30 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <Logo size="sm" showText={true} className="text-foreground" />
-            <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full font-medium">
-              Authority Dashboard
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              isAuthority 
+                ? "bg-accent/20 text-accent" 
+                : "bg-muted/50 text-muted-foreground"
+            }`}>
+              {isAuthority ? "Authority Dashboard" : "Complaint Tracker"}
             </span>
           </Link>
           
           <div className="flex items-center gap-3">
+            {isAuthority && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20">
+                <span className="text-xs font-medium text-accent">Authority Mode</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 px-2 text-xs"
+                  onClick={logout}
+                >
+                  <LogOut className="w-3 h-3" />
+                  Logout
+                </Button>
+              </div>
+            )}
             <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Refresh
@@ -167,6 +242,80 @@ export default function DashboardPage() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
+        {!isAuthority && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-4"
+          >
+            <div className="p-2 rounded-full bg-blue-100">
+              <FileText className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-900">Complaint Tracker Mode</h3>
+              <p className="text-sm text-blue-800">
+                You are viewing complaints as a citizen. To assign complaints and update status, please <Link to="/authority-login" className="underline font-medium hover:text-blue-700">login as an authority</Link>.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Sticky Navigation Bar */}
+        <div className="sticky top-16 z-40 bg-card/95 backdrop-blur-md border-b border-border/50 -mx-4 px-4 mb-6 -mt-6 pt-4 pb-0">
+          <div className="flex items-center gap-1 overflow-x-auto pb-4">
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => setActiveTab("complaints")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === "complaints" 
+                    ? "bg-accent text-accent-foreground" 
+                    : "text-foreground hover:bg-muted"
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Complaints
+              </button>
+              {isAuthority && (
+                <button 
+                  onClick={() => setActiveTab("predictions")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === "predictions" 
+                      ? "bg-accent text-accent-foreground" 
+                      : "text-foreground hover:bg-muted"
+                  }`}
+                >
+                  <Brain className="w-4 h-4" />
+                  AI Prediction
+                </button>
+              )}
+              <button 
+                onClick={() => setActiveTab("government")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === "government" 
+                    ? "bg-accent text-accent-foreground" 
+                    : "text-foreground hover:bg-muted"
+                }`}
+              >
+                <Building2 className="w-4 h-4" />
+                Govt Integration
+              </button>
+              {isAuthority && (
+                <button 
+                  onClick={() => setActiveTab("analytics")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+                    activeTab === "analytics" 
+                      ? "bg-accent text-accent-foreground" 
+                      : "text-foreground hover:bg-muted"
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Analytics
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
@@ -186,7 +335,7 @@ export default function DashboardPage() {
             </motion.div>
 
             {/* Critical Alert */}
-            {criticalComplaints.length > 0 && (
+            {isAuthority && criticalComplaints.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -215,27 +364,32 @@ export default function DashboardPage() {
             )}
 
             {/* Main Content */}
-            <Tabs defaultValue="complaints" className="space-y-6">
-              <TabsList className="bg-muted/50 p-1 flex-wrap">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+              <TabsList className="bg-muted/50 p-1 flex-wrap hidden">
                 <TabsTrigger value="complaints" className="gap-2 text-foreground data-[state=active]:text-foreground">
                   <LayoutDashboard className="w-4 h-4" />
                   Complaints ({complaints.length})
                 </TabsTrigger>
-                <TabsTrigger value="predictions" className="gap-2 text-foreground data-[state=active]:text-foreground">
-                  <Brain className="w-4 h-4" />
-                  AI Predictions
-                </TabsTrigger>
+                {isAuthority && (
+                  <TabsTrigger value="predictions" className="gap-2 text-foreground data-[state=active]:text-foreground">
+                    <Brain className="w-4 h-4" />
+                    AI Predictions
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="government" className="gap-2 text-foreground data-[state=active]:text-foreground">
                   <Building2 className="w-4 h-4" />
                   Govt. Integration
                 </TabsTrigger>
-                <TabsTrigger value="analytics" className="gap-2 text-foreground data-[state=active]:text-foreground">
-                  <BarChart3 className="w-4 h-4" />
-                  Analytics
-                </TabsTrigger>
+                {isAuthority && (
+                  <TabsTrigger value="analytics" className="gap-2 text-foreground data-[state=active]:text-foreground">
+                    <BarChart3 className="w-4 h-4" />
+                    Analytics
+                  </TabsTrigger>
+                )}
               </TabsList>
 
-              <TabsContent value="complaints" className="space-y-6">
+              <div id="complaints-section">
+                <TabsContent value="complaints" className="space-y-6">
                 {/* Filters */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -300,9 +454,9 @@ export default function DashboardPage() {
                 </motion.div>
 
                 {/* Complaints Grid */}
-                {filteredComplaints.length > 0 ? (
+                {mergedComplaints.length > 0 ? (
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredComplaints.map((complaint, index) => (
+                    {mergedComplaints.map((complaint, index) => (
                       <motion.div
                         key={complaint.id}
                         initial={{ opacity: 0, y: 20 }}
@@ -313,6 +467,9 @@ export default function DashboardPage() {
                           complaint={complaint} 
                           onStatusChange={updateComplaintStatus}
                           getDepartmentName={getDepartmentName}
+                          isAuthority={isAuthority}
+                          onSelect={setSelectedComplaint}
+                          reporterCount={(complaint as any).reporterCount}
                         />
                       </motion.div>
                     ))}
@@ -335,35 +492,112 @@ export default function DashboardPage() {
                     )}
                   </div>
                 )}
-              </TabsContent>
+                </TabsContent>
+              </div>
 
-              <TabsContent value="predictions" className="space-y-6">
-                <AdvancedPredictions complaints={complaints} />
-              </TabsContent>
+              {isAuthority && (
+                <div id="predictions-section">
+                  <TabsContent value="predictions" className="space-y-6">
+                    <AdvancedPredictions complaints={complaints} />
+                  </TabsContent>
+                </div>
+              )}
 
-              <TabsContent value="government" className="space-y-6">
-                <GovernmentIntegration />
-              </TabsContent>
+              <div id="government-section">
+                <TabsContent value="government" className="space-y-6">
+                  <GovernmentIntegration />
+                </TabsContent>
+              </div>
 
-              <TabsContent value="analytics" className="space-y-6">
-                {complaints.length > 0 ? (
-                  <div className="grid lg:grid-cols-2 gap-6">
-                    <CategoryChart categoryBreakdown={stats.categoryBreakdown} />
-                    <DepartmentPerformance departmentPerformance={stats.departmentPerformance as Record<string, { total: number; resolved: number; avgTime: number }>} />
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                    <p className="text-muted-foreground">
-                      No data yet. Submit some complaints to see analytics.
-                    </p>
-                  </div>
-                )}
-              </TabsContent>
+              {isAuthority && (
+                <div id="analytics-section">
+                  <TabsContent value="analytics" className="space-y-6">
+                    {complaints.length > 0 ? (
+                      <div className="grid lg:grid-cols-2 gap-6">
+                        <CategoryChart categoryBreakdown={stats.categoryBreakdown} />
+                        <DepartmentPerformance departmentPerformance={stats.departmentPerformance as Record<string, { total: number; resolved: number; avgTime: number }>} />
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                        <p className="text-muted-foreground">
+                          No data yet. Submit some complaints to see analytics.
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+                </div>
+              )}
             </Tabs>
           </>
         )}
       </main>
+
+      {/* Complaint Detail Modal */}
+      <Dialog open={!!selectedComplaint} onOpenChange={() => setSelectedComplaint(null)}>
+        <DialogContent className="max-w-3xl">
+          {selectedComplaint && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="flex items-center justify-between gap-3">
+                  <span className="text-lg">{getDepartmentName(selectedComplaint.department_id) || 'Unassigned Department'}</span>
+                  <div className="flex items-center gap-2">
+                    <PriorityBadge priority={selectedComplaint.priority} score={selectedComplaint.priority_score || undefined} />
+                    <StatusBadge status={selectedComplaint.status === 'in_progress' ? 'in-progress' : selectedComplaint.status} />
+                  </div>
+                </DialogTitle>
+                <DialogDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">{selectedComplaint.category}{selectedComplaint.sub_category ? ` · ${selectedComplaint.sub_category}` : ''}</span>
+                  <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">ID: {selectedComplaint.complaint_id}</span>
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-foreground">Complaint</h4>
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">{selectedComplaint.description}</p>
+              </div>
+
+              {selectedComplaint.impact_prediction && (
+                <div className="p-3 rounded-lg bg-muted/60 border border-border/60 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-priority-high mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Impact Prediction</p>
+                    <p className="text-sm text-muted-foreground">{selectedComplaint.impact_prediction}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid sm:grid-cols-2 gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  <span>{selectedComplaint.location || 'Location not specified'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  <span>{formatDistanceToNow(new Date(selectedComplaint.created_at), { addSuffix: true })}</span>
+                </div>
+              </div>
+
+              {selectedComplaint.media_urls && selectedComplaint.media_urls.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-foreground">Attachments</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {selectedComplaint.media_urls.map((url, idx) => (
+                      <a key={idx} href={url} target="_blank" rel="noreferrer" className="block">
+                        <img 
+                          src={url} 
+                          alt={`Complaint attachment ${idx + 1}`} 
+                          className="w-full h-28 object-cover rounded-lg border border-border/60 hover:border-accent transition"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
