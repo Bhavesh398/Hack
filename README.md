@@ -1,3 +1,34 @@
+Problem Statement
+ps 12 :AI for Grievance Redressal in Public Governance
+Problem Statement
+Public governance bodies receive thousands of citizen grievances every day, covering issues such as civic
+infrastructure, sanitation, public safety, utilities, healthcare, education, and administrative delays.
+These complaints are typically:
+Unstructured (free-text, voice notes, mixed languages)
+Manually reviewed and routed
+Slow to resolve, leading to backlogs, citizen dissatisfaction, and lack of accountability
+The absence of intelligent prioritization and analysis causes critical grievances to be delayed, while
+authorities struggle to gain actionable insights from large volumes of complaint data.
+There is a pressing need for an AI-powered grievance redressal system that can intelligently understand,
+categorize, and prioritize citizen complaints to enable faster, fairer, and more transparent governance.
+Objective
+Design and develop an AI-driven grievance redressal platform using Natural Language Processing (NLP) and
+intelligent automation that can:
+Automatically analyze and classify citizen complaints
+Prioritize grievances based on urgency, severity, and impact
+Route complaints to the appropriate department or authority
+Assist government bodies in resolving issues efficiently and transparentl
+
+PROJECT NAME :  SAMADHAN
+
+TEAM NAME : RODGERS
+
+DEPLOYED LINK :
+
+VIDEO LINK : 
+
+PPT LINK : 
+
 
 ## How can I edit this code?
 
