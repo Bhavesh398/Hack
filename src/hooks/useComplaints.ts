@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface DbComplaint {
   id: string;
@@ -44,13 +45,20 @@ export function useComplaints() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const { departmentId: authorityDepartmentId, isAuthority } = useAuth();
 
   const fetchComplaints = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('complaints')
         .select('*')
         .order('created_at', { ascending: false });
+
+      if (isAuthority && authorityDepartmentId) {
+        query = query.eq('department_id', authorityDepartmentId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setComplaints(data || []);
@@ -58,7 +66,7 @@ export function useComplaints() {
       console.error('Error fetching complaints:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch complaints');
     }
-  }, []);
+  }, [authorityDepartmentId, isAuthority]);
 
   const fetchDepartments = useCallback(async () => {
     try {
@@ -85,6 +93,8 @@ export function useComplaints() {
 
   // Set up realtime subscription
   useEffect(() => {
+    const filter = isAuthority && authorityDepartmentId ? `department_id=eq.${authorityDepartmentId}` : undefined;
+
     const channel = supabase
       .channel('complaints-changes')
       .on(
@@ -92,18 +102,23 @@ export function useComplaints() {
         {
           event: '*',
           schema: 'public',
-          table: 'complaints'
+          table: 'complaints',
+          filter,
         },
         (payload) => {
-          console.log('Realtime update:', payload);
+          const newRow = payload.new as DbComplaint;
+          if (isAuthority && authorityDepartmentId && newRow.department_id !== authorityDepartmentId) {
+            return;
+          }
+
           if (payload.eventType === 'INSERT') {
-            setComplaints(prev => [payload.new as DbComplaint, ...prev]);
+            setComplaints(prev => [newRow, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
             setComplaints(prev => 
-              prev.map(c => c.id === payload.new.id ? payload.new as DbComplaint : c)
+              prev.map(c => c.id === newRow.id ? newRow : c)
             );
           } else if (payload.eventType === 'DELETE') {
-            setComplaints(prev => prev.filter(c => c.id !== payload.old.id));
+            setComplaints(prev => prev.filter(c => c.id !== (payload.old as DbComplaint).id));
           }
         }
       )
@@ -112,7 +127,7 @@ export function useComplaints() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [authorityDepartmentId, isAuthority]);
 
   const submitComplaint = async (data: {
     citizenName: string;

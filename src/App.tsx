@@ -9,6 +9,7 @@ import FileComplaintPage from "./pages/FileComplaintPage";
 import DashboardPage from "./pages/DashboardPage";
 import AuthorityLoginPage from "./pages/AuthorityLoginPage";
 import NotFound from "./pages/NotFound";
+import { ChatBuddy } from "./components/ChatBuddy";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <ChatBuddy />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

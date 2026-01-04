@@ -190,7 +190,7 @@ export default function LandingPage() {
               <Link to="/dashboard">
                 <Button variant="heroOutline" size="xl">
                   <Users className="w-5 h-5" />
-                  Authority Portal
+                  Complaint Tracker
                 </Button>
               </Link>
             </motion.div>
