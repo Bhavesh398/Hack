@@ -5,5 +5,10 @@
   "compilerOptions": {
     "lib": ["deno.window"],
     "target": "ES2020"
+  },
+  "fmt": {
+    "files": {
+      "include": ["./predict-issues", "./analyze-complaint", "./chat-assist"]
+    }
   }
 }

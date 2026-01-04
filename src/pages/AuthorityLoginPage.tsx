@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,22 +8,39 @@ import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Department } from "@/hooks/useComplaints";
 
 export default function AuthorityLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentId, setDepartmentId] = useState<string>("");
   const { toast } = useToast();
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      const { data, error } = await supabase.from("departments").select("*").order("name");
+      if (error) {
+        console.error("Failed to load departments", error);
+        return;
+      }
+      setDepartments(data || []);
+    };
+    fetchDepartments();
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    if (!email || !password || !departmentId) {
       toast({
         title: "Missing Fields",
-        description: "Please enter both email and password",
+        description: "Please enter email, password, and select a department",
         variant: "destructive",
       });
       return;
@@ -35,7 +52,8 @@ export default function AuthorityLoginPage() {
       // Simulate login (replace with actual API call)
       setTimeout(() => {
         // Mark user as authority
-        login();
+        const selectedDept = departments.find((d) => d.id === departmentId);
+        login(departmentId, selectedDept?.name || "");
         
         toast({
           title: "Login Successful",
@@ -119,6 +137,22 @@ export default function AuthorityLoginPage() {
                       disabled={isLoading}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Select Department</label>
+                  <Select value={departmentId} onValueChange={setDepartmentId} disabled={isLoading || departments.length === 0}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={departments.length === 0 ? "Loading departments..." : "Choose your option"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <Button

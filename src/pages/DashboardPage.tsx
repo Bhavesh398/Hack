@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/Logo";
@@ -14,6 +16,9 @@ import { CategoryChart } from "@/components/CategoryChart";
 import { DepartmentPerformance } from "@/components/DepartmentPerformance";
 import { GovernmentIntegration } from "@/components/GovernmentIntegration";
 import { AdvancedPredictions } from "@/components/AdvancedPredictions";
+import { PriorityDistributionChart } from "@/components/PriorityDistributionChart";
+import { ComplaintsTrendChart } from "@/components/ComplaintsTrendChart";
+import { LocationHeatmap } from "@/components/LocationHeatmap";
 import { PriorityBadge } from "@/components/PriorityBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -33,7 +38,8 @@ import {
   Loader2,
   Building2,
   Brain,
-  LogOut
+  LogOut,
+  FileDown
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -138,7 +144,7 @@ function ComplaintCardReal({ complaint, onStatusChange, getDepartmentName, isAut
 
 export default function DashboardPage() {
   const { complaints, loading, stats, updateComplaintStatus, getDepartmentName, refetch } = useComplaints();
-  const { isAuthority, logout } = useAuth();
+  const { isAuthority, departmentName, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -196,6 +202,64 @@ export default function DashboardPage() {
 
   const criticalComplaints = complaints.filter(c => c.priority === 'critical' && c.status !== 'resolved');
 
+  const handleDownloadReport = () => {
+    if (!selectedComplaint) return;
+
+    const complaint = selectedComplaint;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const margin = 40;
+    let y = margin;
+
+    const valueOrDash = (value?: string | null) => {
+      if (!value || value.trim() === "") return "—";
+      return value;
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Grievance Report", margin, y);
+    y += 20;
+    doc.setFontSize(10);
+    doc.setTextColor(90);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
+    doc.setTextColor(0);
+    y += 12;
+
+    const rows: string[][] = [
+      ["Grievance Code", complaint.complaint_id],
+      ["Department", getDepartmentName(complaint.department_id) || "Unassigned"],
+      ["Category", `${complaint.category}${complaint.sub_category ? ` / ${complaint.sub_category}` : ""}`],
+      ["Priority", complaint.priority],
+      ["Current Status", complaint.status.replace("_", " ")],
+      ["Date of Receipt", new Date(complaint.created_at).toLocaleString()],
+      ["Resolved At", complaint.resolved_at ? new Date(complaint.resolved_at).toLocaleString() : "Pending"],
+      ["Location", valueOrDash(complaint.location)],
+      ["Report Count", complaint.reporterCount ? complaint.reporterCount.toString() : "1"],
+      ["Impact Prediction", valueOrDash(complaint.impact_prediction)],
+      ["Description", valueOrDash(complaint.description)],
+    ];
+
+    if (complaint.media_urls && complaint.media_urls.length > 0) {
+      rows.push(["Attachments", complaint.media_urls.join("\n")]);
+    }
+
+    autoTable(doc, {
+      head: [["Field", "Value"]],
+      body: rows,
+      startY: y + 8,
+      styles: { font: "helvetica", fontSize: 10, cellPadding: 6, valign: "top" },
+      headStyles: { fillColor: [27, 94, 166], textColor: 255, fontStyle: "bold" },
+      columnStyles: {
+        0: { cellWidth: 130, fontStyle: "bold" },
+        1: { cellWidth: "auto" },
+      },
+      tableLineColor: [220, 220, 220],
+      tableLineWidth: 0.5,
+    });
+
+    doc.save(`complaint-${complaint.complaint_id}.pdf`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -213,9 +277,9 @@ export default function DashboardPage() {
           </Link>
           
           <div className="flex items-center gap-3">
-            {isAuthority && (
+            {isAuthority ? (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/10 border border-accent/20">
-                <span className="text-xs font-medium text-accent">Authority Mode</span>
+                <span className="text-xs font-medium text-accent">{departmentName || "Authority"}</span>
                 <Button 
                   variant="ghost" 
                   size="sm" 
@@ -226,6 +290,13 @@ export default function DashboardPage() {
                   Logout
                 </Button>
               </div>
+            ) : (
+              <Link to="/authority-login">
+                <Button variant="secondary" size="sm" className="gap-2">
+                  <FileText className="w-4 h-4" />
+                  Authority Login
+                </Button>
+              </Link>
             )}
             <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -242,23 +313,7 @@ export default function DashboardPage() {
       </header>
 
       <main className="container mx-auto px-4 py-6">
-        {!isAuthority && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200 flex items-center gap-4"
-          >
-            <div className="p-2 rounded-full bg-blue-100">
-              <FileText className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-blue-900">Complaint Tracker Mode</h3>
-              <p className="text-sm text-blue-800">
-                You are viewing complaints as a citizen. To assign complaints and update status, please <Link to="/authority-login" className="underline font-medium hover:text-blue-700">login as an authority</Link>.
-              </p>
-            </div>
-          </motion.div>
-        )}
+        {/* Info banner removed per request */}
 
         {/* Sticky Navigation Bar */}
         <div className="sticky top-16 z-40 bg-card/95 backdrop-blur-md border-b border-border/50 -mx-4 px-4 mb-6 -mt-6 pt-4 pb-0">
@@ -513,10 +568,24 @@ export default function DashboardPage() {
                 <div id="analytics-section">
                   <TabsContent value="analytics" className="space-y-6">
                     {complaints.length > 0 ? (
-                      <div className="grid lg:grid-cols-2 gap-6">
-                        <CategoryChart categoryBreakdown={stats.categoryBreakdown} />
-                        <DepartmentPerformance departmentPerformance={stats.departmentPerformance as Record<string, { total: number; resolved: number; avgTime: number }>} />
-                      </div>
+                      <>
+                        {/* Top row - Trend and Priority Distribution */}
+                        <div className="grid lg:grid-cols-2 gap-6">
+                          <ComplaintsTrendChart complaints={complaints} />
+                          <PriorityDistributionChart complaints={complaints} />
+                        </div>
+
+                        {/* Middle row - Category and Department */}
+                        <div className="grid lg:grid-cols-2 gap-6">
+                          <CategoryChart categoryBreakdown={stats.categoryBreakdown} />
+                          <DepartmentPerformance departmentPerformance={stats.departmentPerformance as Record<string, { total: number; resolved: number; avgTime: number }>} />
+                        </div>
+
+                        {/* Bottom row - Location Heatmap (full width) */}
+                        <div className="grid grid-cols-1 gap-6">
+                          <LocationHeatmap complaints={complaints} />
+                        </div>
+                      </>
                     ) : (
                       <div className="text-center py-12">
                         <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
@@ -542,6 +611,15 @@ export default function DashboardPage() {
                 <DialogTitle className="flex items-center justify-between gap-3">
                   <span className="text-lg">{getDepartmentName(selectedComplaint.department_id) || 'Unassigned Department'}</span>
                   <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-2"
+                      onClick={handleDownloadReport}
+                    >
+                      <FileDown className="w-4 h-4" />
+                      Download report
+                    </Button>
                     <PriorityBadge priority={selectedComplaint.priority} score={selectedComplaint.priority_score || undefined} />
                     <StatusBadge status={selectedComplaint.status === 'in_progress' ? 'in-progress' : selectedComplaint.status} />
                   </div>

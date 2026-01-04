@@ -2,7 +2,9 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 interface AuthContextType {
   isAuthority: boolean;
-  login: () => void;
+  departmentId: string | null;
+  departmentName: string | null;
+  login: (departmentId: string, departmentName: string) => void;
   logout: () => void;
 }
 
@@ -14,18 +16,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem("isAuthority") === "true";
   });
 
-  const login = () => {
+  const [departmentId, setDepartmentId] = useState<string | null>(() => {
+    return localStorage.getItem("authorityDepartmentId");
+  });
+
+  const [departmentName, setDepartmentName] = useState<string | null>(() => {
+    return localStorage.getItem("authorityDepartmentName");
+  });
+
+  const login = (deptId: string, deptName: string) => {
     setIsAuthority(true);
+    setDepartmentId(deptId);
+    setDepartmentName(deptName);
     localStorage.setItem("isAuthority", "true");
+    localStorage.setItem("authorityDepartmentId", deptId);
+    localStorage.setItem("authorityDepartmentName", deptName);
   };
 
   const logout = () => {
     setIsAuthority(false);
+    setDepartmentId(null);
+    setDepartmentName(null);
     localStorage.removeItem("isAuthority");
+    localStorage.removeItem("authorityDepartmentId");
+    localStorage.removeItem("authorityDepartmentName");
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthority, login, logout }}>
+    <AuthContext.Provider value={{ isAuthority, departmentId, departmentName, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
