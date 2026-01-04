@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { sendComplaintConfirmation, sendStatusUpdateEmail } from '@/lib/emailNotifications';
 
 export interface DbComplaint {
   id: string;
@@ -223,6 +224,21 @@ export function useComplaints() {
 
       if (insertError) throw insertError;
 
+        // Send email confirmation if email provided
+        if (data.citizenEmail) {
+          try {
+            await sendComplaintConfirmation(
+              data.citizenEmail,
+              complaintId,
+              data.citizenName,
+              analysisData.category
+            );
+          } catch (emailError) {
+            console.warn('Failed to send confirmation email:', emailError);
+            // Don't fail the complaint submission if email fails
+          }
+        }
+
       toast({
         title: 'Complaint Submitted Successfully',
         description: `Your complaint ID is ${complaintId}. Track it in the dashboard.`,
@@ -314,6 +330,15 @@ export function useComplaints() {
 
   const updateComplaintStatus = async (id: string, status: DbComplaint['status']) => {
     try {
+        // Get current complaint data first
+        const { data: complaint, error: fetchError } = await supabase
+          .from('complaints')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
       const updateData: Record<string, unknown> = { status };
       if (status === 'resolved') {
         updateData.resolved_at = new Date().toISOString();
@@ -325,6 +350,22 @@ export function useComplaints() {
         .eq('id', id);
 
       if (error) throw error;
+
+        // Send email notification if email exists
+        if (complaint.citizen_email) {
+          try {
+            await sendStatusUpdateEmail(
+              complaint.citizen_email,
+              complaint.complaint_id,
+              complaint.citizen_name,
+              complaint.category,
+              status,
+              complaint.assigned_officer || undefined
+            );
+          } catch (emailError) {
+            console.warn('Failed to send status update email:', emailError);
+          }
+        }
 
       toast({
         title: 'Status Updated',
