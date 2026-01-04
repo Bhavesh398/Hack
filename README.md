@@ -23,7 +23,7 @@ PROJECT NAME :  SAMADHAN
 
 TEAM NAME : RODGERS
 
-DEPLOYED LINK :
+DEPLOYED LINK : https://samadhan-eight.vercel.app/
 
 VIDEO LINK : 
 
